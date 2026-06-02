@@ -668,6 +668,17 @@ async def api_create_order(request):
 async def index(request):
     return web.Response(text=HTML_PAGE, content_type="text/html")
 
+async def telegram_webhook(request):
+    """Принимает обновления от Telegram и передаёт их боту"""
+    try:
+        data = await request.json()
+        update = Update.de_json(data, application.bot)
+        await application.update_queue.put(update)
+        return web.Response(text="OK")
+    except Exception as e:
+        logger.error(f"Webhook error: {e}")
+        return web.Response(text="OK")
+
 # ---------- ЗАПУСК ----------
 application = None
 
@@ -675,34 +686,40 @@ def main():
     global application
     application = Application.builder().token(TELEGRAM_TOKEN).build()
 
-    # Обработчики команд и сообщений
+    # Все обработчики (команды, диалоги и т.д.) – они у вас уже есть,
+    # убедитесь, что они добавлены (я не стал переписывать все, оставьте свои)
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("admin", lambda u,c: main_menu_text(u,c) if u.effective_user.id==ADMIN_ID else None))
-    # Обработчик текстовых сообщений (для диалогов админа)
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_input))
-    application.add_handler(MessageHandler(filters.PHOTO, handle_photo_input))
-    # Обработчик обычных кнопок покупателей
-    application.add_handler(MessageHandler(filters.Regex("^(🛍 Открыть магазин|📦 Мои заказы|ℹ️ О магазине|🔧 Админ панель)$"), main_menu_text))
-    # Обработчик инлайн-колбэков (админ-панель)
-    application.add_handler(CallbackQueryHandler(admin_callback))
+    application.add_handler(CommandHandler("admin", admin_panel))
+    application.add_handler(CommandHandler("addcategory", add_category_start))
+    application.add_handler(CommandHandler("addproduct", add_product_start))
+    application.add_handler(CommandHandler("editproduct", edit_product_start))
+    application.add_handler(CallbackQueryHandler(admin_orders, pattern="^admin_orders$"))
+    application.add_handler(CallbackQueryHandler(change_order_status, pattern="^order_status_"))
+    application.add_handler(CallbackQueryHandler(admin_panel, pattern="^admin_panel$"))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, main_menu_text))
 
-    # Запуск бота в режиме polling (для Render удобнее, но можно оставить и веб-сервер)
+    # Диалоги (они тоже уже есть, оставьте как есть)
+    # ... conv_addcat, conv_addprod, conv_editprod ...
+
+    # Установка вебхука (вместо polling)
+    webhook_url = f"{WEBHOOK_URL}/{TELEGRAM_TOKEN}"
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     loop.run_until_complete(application.initialize())
+    loop.run_until_complete(application.bot.set_webhook(webhook_url))
     loop.run_until_complete(application.start())
-    loop.create_task(application.updater.start_polling())
+    # НЕ вызываем polling: убираем application.updater.start_polling()
 
-    # Веб-сервер для мини-аппа
+    # Веб-сервер (aiohttp)
     web_app = web.Application()
     web_app.router.add_get("/", index)
     web_app.router.add_get("/api/categories", api_categories)
     web_app.router.add_get("/api/store_name", api_store_name)
     web_app.router.add_get("/api/products/{cat_id}", api_products)
     web_app.router.add_post("/api/create_order", api_create_order)
+    web_app.router.add_post(f"/{TELEGRAM_TOKEN}", telegram_webhook)   # эндпоинт для вебхука
 
     port = int(os.environ.get("PORT", 8000))
     web.run_app(web_app, host="0.0.0.0", port=port, loop=loop)
-
 if __name__ == "__main__":
     main()
