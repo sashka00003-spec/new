@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 TELEGRAM_TOKEN = "8812317225:AAE-cOCndbJkbRysfm-Ed8iLGMk_APZ18Jg"
 ADMIN_ID = 2064971302
-WEBHOOK_URL = os.getenv("WEBHOOK_URL", "")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL", "https://new-qudb.onrender.com/")
 
 DB_PATH = "store.db"
 
