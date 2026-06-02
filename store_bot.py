@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 # Переменные окружения (замените на свои или используйте .env)
 TELEGRAM_TOKEN = "8812317225:AAE-cOCndbJkbRysfm-Ed8iLGMk_APZ18Jg"
 ADMIN_ID = 2064971302  # ваш Telegram ID
-WEBHOOK_URL = "https://ваш-домен.ngrok.io"  # для мини-аппа (при локальном тесте через ngrok)
+WEBHOOK_URL = os.getenv("WEBHOOK_URL", "")
 
 # ---------- БАЗА ДАННЫХ ----------
 DB_PATH = "store.db"
@@ -177,11 +177,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=get_main_keyboard()
     )
 
+# Вместо жёсткой строки
+WEBHOOK_URL = os.getenv("WEBHOOK_URL", "")
+
+# И в main_menu_text:
 async def main_menu_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     if text == "🛍 Открыть магазин":
         url = WEBHOOK_URL
-        if not url or url.startswith("https://ваш-домен"):
+        if not url:
             await update.message.reply_text("🌐 Ссылка на магазин пока не настроена. Сообщите администратору.")
             return
         await update.message.reply_text(
@@ -190,6 +194,7 @@ async def main_menu_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [InlineKeyboardButton("🚀 Открыть магазин", web_app=WebAppInfo(url=url))]
             ])
         )
+    # ... остальные условия без изменений
     elif text == "📦 Мои заказы":
         uid = update.effective_user.id
         with sqlite3.connect(DB_PATH) as conn:
